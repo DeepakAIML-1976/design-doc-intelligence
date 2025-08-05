@@ -1,30 +1,31 @@
-from dotenv import load_dotenv
 import os
 import streamlit as st
 import fitz  # PyMuPDF
+from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_community.vectorstores import Chroma
 from langchain.chains import RetrievalQA
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-# Load environment variables from .env in root directory
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
+# Load environment variables from .env in project root
+env_path = os.path.join(os.path.dirname(__file__), ".env")
+load_dotenv(dotenv_path=env_path)
+
+# Set API key for OpenAI
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
 if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY is not set. Please check your .env file in the root directory.")
+    raise ValueError("OPENAI_API_KEY is not set in the .env file")
 
-# Set environment variable explicitly for langchain to pick it up
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 
-# Define constants
+# Constants
 EMBEDDING_MODEL = "text-embedding-3-small"
 LLM_MODEL = "gpt-4"
 PERSIST_DIRECTORY = "db"
 CHROMA_COLLECTION_NAME = "design_doc_collection"
 
-# Initialize embeddings and LLM WITHOUT api_key parameter
+# Initialize LLM & Embeddings
 embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 llm = ChatOpenAI(model=LLM_MODEL)
 
@@ -57,5 +58,3 @@ if uploaded_file is not None:
 
     if query:
         with st.spinner("Searching your document..."):
-            result = qa_chain.run(query)
-        st.write("**Answer:**", result)
