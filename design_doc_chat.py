@@ -1,77 +1,63 @@
-# design_doc_chat.py
-
+from dotenv import load_dotenv
 import os
-import fitz  # PyMuPDF
 import streamlit as st
-from langchain_community.vectorstores import Chroma
-from langchain_community.document_loaders import PyMuPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+import fitz  # PyMuPDF
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_community.document_loaders import PyMuPDFLoader
+from langchain_community.vectorstores import Chroma
 from langchain.chains import RetrievalQA
-from langchain.schema.runnable import RunnableMap
-from langchain.prompts import PromptTemplate
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-# Streamlit UI setup
-st.set_page_config(page_title="Design Document Intelligence", layout="wide")
-st.title("📄 AI-Powered Design Document Chat")
+# Load environment variables
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# Load API key from secrets or environment
-OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise ValueError("OPENAI_API_KEY is not set. Please check your .env file.")
 
-# Model and embedding settings
+# Set API key for langchain-openai compatibility
+os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+
+# Define constants
 EMBEDDING_MODEL = "text-embedding-3-small"
-CHAT_MODEL = "gpt-4"
+LLM_MODEL = "gpt-4"
+PERSIST_DIRECTORY = "db"
+CHROMA_COLLECTION_NAME = "design_doc_collection"
 
-# File uploader
-uploaded_file = st.file_uploader("Upload a design document (PDF)", type="pdf")
+# Initialize embeddings and LLM
+embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
+llm = ChatOpenAI(model=LLM_MODEL)
 
-if uploaded_file:
-    file_path = os.path.join("temp_docs", uploaded_file.name)
-    os.makedirs("temp_docs", exist_ok=True)
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+# Initialize Streamlit UI
+st.set_page_config(page_title="Design Document Intelligence")
+st.title("📄 Design Document Intelligence Chat")
 
-    # Load and split the document
-    loader = PyMuPDFLoader(file_path)
+uploaded_file = st.file_uploader("Upload your PDF design document", type="pdf")
+query = st.text_input("Ask a question about the document:")
+
+if uploaded_file is not None:
+    with open("temp.pdf", "wb") as f:
+        f.write(uploaded_file.read())
+
+    # Load and split document
+    loader = PyMuPDFLoader("temp.pdf")
     documents = loader.load()
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    docs = text_splitter.split_documents(documents)
 
-    # Embeddings and vector store
-    embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL, api_key=OPENAI_API_KEY)
-    vectordb = Chroma.from_documents(documents=docs, embedding=embeddings)
-    retriever = vectordb.as_retriever()
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    texts = text_splitter.split_documents(documents)
 
-    # Prompt template
-    template = """
-    You are an expert in oil & gas engineering design. Use the context below to answer the question accurately and precisely.
-
-    Context:
-    {context}
-
-    Question:
-    {question}
-    """
-    prompt = PromptTemplate(input_variables=["context", "question"], template=template)
-
-    # QA Chain setup
-    llm = ChatOpenAI(model_name=CHAT_MODEL, api_key=OPENAI_API_KEY)
-    qa_chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        retriever=retriever,
-        chain_type="stuff",
-        chain_type_kwargs={"prompt": prompt}
+    # Create vectorstore
+    vectordb = Chroma.from_documents(
+        documents=texts,
+        embedding=embeddings,
+        persist_directory=PERSIST_DIRECTORY,
+        collection_name=CHROMA_COLLECTION_NAME
     )
 
-    # User input for query
-    query = st.text_input("Ask a question about the uploaded document:")
+    retriever = vectordb.as_retriever()
+    qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
 
     if query:
-        with st.spinner("Processing..."):
-            answer = qa_chain.run(query)
-            st.markdown(f"**Answer:** {answer}")
-
-        # Optional: show sources
-        # st.write("\n**Retrieved Chunks:**")
-        # for doc in retriever.get_relevant_documents(query):
-        #     st.write(doc.page_content[:300])
+        with st.spinner("Searching your document..."):
+            result = qa_chain.run(query)
+        st.write("**Answer:**", result)
