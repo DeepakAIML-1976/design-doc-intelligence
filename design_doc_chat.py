@@ -1,76 +1,77 @@
+# design_doc_chat.py
+
 import os
 import fitz  # PyMuPDF
 import streamlit as st
-import openai
+from langchain_community.vectorstores import Chroma
+from langchain_community.document_loaders import PyMuPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain.vectorstores import Chroma
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains import RetrievalQA
-from langchain.document_loaders import PyMuPDFLoader
-from dotenv import load_dotenv
+from langchain.schema.runnable import RunnableMap
+from langchain.prompts import PromptTemplate
 
-# Load OpenAI API key from .env if exists
+# Streamlit UI setup
+st.set_page_config(page_title="Design Document Intelligence", layout="wide")
+st.title("📄 AI-Powered Design Document Chat")
 
+# Load API key from secrets or environment
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else os.getenv("OPENAI_API_KEY")
 
 # Model and embedding settings
 EMBEDDING_MODEL = "text-embedding-3-small"
 CHAT_MODEL = "gpt-4"
 
-# Constants
-CHROMA_DIR = "chroma_db"
-DATA_DIR = "data"
-EMBEDDING_MODEL = "text-embedding-3-small"
-
-# Set page config
-st.set_page_config(page_title="Design Doc Chat", layout="wide")
-st.title("📄🧠 AI-Powered Vendor Datasheet Assistant")
-
 # File uploader
-uploaded_file = st.file_uploader("Upload a vendor datasheet (PDF)", type=["pdf"])
+uploaded_file = st.file_uploader("Upload a design document (PDF)", type="pdf")
 
-# Process uploaded file
 if uploaded_file:
-    file_path = os.path.join(DATA_DIR, uploaded_file.name)
-    os.makedirs(DATA_DIR, exist_ok=True)
+    file_path = os.path.join("temp_docs", uploaded_file.name)
+    os.makedirs("temp_docs", exist_ok=True)
     with open(file_path, "wb") as f:
-        f.write(uploaded_file.read())
-    st.success("PDF uploaded and saved!")
+        f.write(uploaded_file.getbuffer())
 
-    # Load and split document
-    st.info("Parsing and embedding document...")
+    # Load and split the document
     loader = PyMuPDFLoader(file_path)
     documents = loader.load()
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    docs = text_splitter.split_documents(documents)
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=150)
-    chunks = text_splitter.split_documents(documents)
+    # Embeddings and vector store
+    embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL, api_key=OPENAI_API_KEY)
+    vectordb = Chroma.from_documents(documents=docs, embedding=embeddings)
+    retriever = vectordb.as_retriever()
 
-    # Embedding and storing
-    embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
-    vectordb = Chroma.from_documents(chunks, embedding=embeddings, persist_directory=CHROMA_DIR)
-    vectordb.persist()
-    st.success("Document indexed successfully.")
+    # Prompt template
+    template = """
+    You are an expert in oil & gas engineering design. Use the context below to answer the question accurately and precisely.
 
-    # Query input
-    question = st.text_input("Ask a question about this datasheet:", placeholder="e.g. What is the design pressure?")
+    Context:
+    {context}
 
-    if question:
-        # RetrievalQA chain
-        llm = ChatOpenAI(model="gpt-4", temperature=0)
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            retriever=vectordb.as_retriever(),
-            return_source_documents=True
-        )
+    Question:
+    {question}
+    """
+    prompt = PromptTemplate(input_variables=["context", "question"], template=template)
 
-        with st.spinner("Searching and thinking..."):
-            result = qa_chain({"query": question})
-            st.subheader("🧠 Answer")
-            st.write(result["result"])
+    # QA Chain setup
+    llm = ChatOpenAI(model_name=CHAT_MODEL, api_key=OPENAI_API_KEY)
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=llm,
+        retriever=retriever,
+        chain_type="stuff",
+        chain_type_kwargs={"prompt": prompt}
+    )
 
-            with st.expander("📎 Source Documents"):
-                for doc in result["source_documents"]:
-                    st.markdown(f"**Page {doc.metadata.get('page', '?')}**: {doc.page_content[:500]}...")
+    # User input for query
+    query = st.text_input("Ask a question about the uploaded document:")
 
+    if query:
+        with st.spinner("Processing..."):
+            answer = qa_chain.run(query)
+            st.markdown(f"**Answer:** {answer}")
 
-
+        # Optional: show sources
+        # st.write("\n**Retrieved Chunks:**")
+        # for doc in retriever.get_relevant_documents(query):
+        #     st.write(doc.page_content[:300])
