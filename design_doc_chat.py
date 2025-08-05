@@ -15,17 +15,20 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY is not set. Please check your .env file in the root directory.")
 
+# Set environment variable explicitly for langchain to pick it up
+os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+
 # Define constants
 EMBEDDING_MODEL = "text-embedding-3-small"
 LLM_MODEL = "gpt-4"
 PERSIST_DIRECTORY = "db"
 CHROMA_COLLECTION_NAME = "design_doc_collection"
 
-# Initialize embeddings and LLM with API key
-embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL, api_key=OPENAI_API_KEY)
-llm = ChatOpenAI(model=LLM_MODEL, api_key=OPENAI_API_KEY)
+# Initialize embeddings and LLM WITHOUT api_key parameter
+embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
+llm = ChatOpenAI(model=LLM_MODEL)
 
-# Initialize Streamlit UI
+# Streamlit UI
 st.set_page_config(page_title="Design Document Intelligence")
 st.title("📄 Design Document Intelligence Chat")
 
@@ -36,14 +39,12 @@ if uploaded_file is not None:
     with open("temp.pdf", "wb") as f:
         f.write(uploaded_file.read())
 
-    # Load and split document
     loader = PyMuPDFLoader("temp.pdf")
     documents = loader.load()
 
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     texts = text_splitter.split_documents(documents)
 
-    # Create vectorstore
     vectordb = Chroma.from_documents(
         documents=texts,
         embedding=embeddings,
