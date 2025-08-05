@@ -11,8 +11,11 @@ from dotenv import load_dotenv
 
 # Load OpenAI API key from .env if exists
 
-api_key = st.secrets["OPENAI_API_KEY"]
-embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL, api_key=api_key)
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else os.getenv("OPENAI_API_KEY")
+
+# Model and embedding settings
+EMBEDDING_MODEL = "text-embedding-3-small"
+CHAT_MODEL = "gpt-4"
 
 # Constants
 CHROMA_DIR = "chroma_db"
@@ -68,5 +71,6 @@ if uploaded_file:
             with st.expander("📎 Source Documents"):
                 for doc in result["source_documents"]:
                     st.markdown(f"**Page {doc.metadata.get('page', '?')}**: {doc.page_content[:500]}...")
+
 
 
