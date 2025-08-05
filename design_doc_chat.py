@@ -8,15 +8,12 @@ from langchain_community.vectorstores import Chroma
 from langchain.chains import RetrievalQA
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from .env in root directory
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY is not set. Please check your .env file.")
-
-# Set API key for langchain-openai compatibility
-os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+    raise ValueError("OPENAI_API_KEY is not set. Please check your .env file in the root directory.")
 
 # Define constants
 EMBEDDING_MODEL = "text-embedding-3-small"
@@ -24,9 +21,9 @@ LLM_MODEL = "gpt-4"
 PERSIST_DIRECTORY = "db"
 CHROMA_COLLECTION_NAME = "design_doc_collection"
 
-# Initialize embeddings and LLM
-embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
-llm = ChatOpenAI(model=LLM_MODEL)
+# Initialize embeddings and LLM with API key
+embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL, api_key=OPENAI_API_KEY)
+llm = ChatOpenAI(model=LLM_MODEL, api_key=OPENAI_API_KEY)
 
 # Initialize Streamlit UI
 st.set_page_config(page_title="Design Document Intelligence")
