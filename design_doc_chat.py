@@ -10,8 +10,9 @@ from langchain.document_loaders import PyMuPDFLoader
 from dotenv import load_dotenv
 
 # Load OpenAI API key from .env if exists
-load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+
+api_key = st.secrets["OPENAI_API_KEY"]
+embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL, api_key=api_key)
 
 # Constants
 CHROMA_DIR = "chroma_db"
@@ -67,4 +68,5 @@ if uploaded_file:
             with st.expander("📎 Source Documents"):
                 for doc in result["source_documents"]:
                     st.markdown(f"**Page {doc.metadata.get('page', '?')}**: {doc.page_content[:500]}...")
+
 
